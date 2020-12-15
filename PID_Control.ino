@@ -23,13 +23,13 @@
 
 // Servo range
 #define _DUTY_MIN 1226     //[0028] servo duty값 최소를 1000으로 고정 222mm
-#define _DUTY_NEU 1546        //[3138] servo duty값 중간을 1450으로 고정 190mm
+#define _DUTY_NEU 1536        //[3138] servo duty값 중간을 1450으로 고정 190mm
 #define _DUTY_MAX 1746     //[3145] servo duty값 최대를 2000으로 고정 167mm
 
 // Servo speed control
 #define _SERVO_ANGLE 30        // [3131] servo 각도 설정
 #define _SERVO_SPEED 720        // [3141] servo 속도 설정
-#define _RAMPUP_TIME 360
+#define _RAMPUP_TIME 720
 
 // Event periods
 #define _INTERVAL_DIST 10 
@@ -37,16 +37,16 @@
 #define _INTERVAL_SERIAL 100 
 
 // PID parameters
-//#define _KP_NEAR 0.99  // 0.99
-//#define _KP_FAR 1.02  // 1.02
+//#define _KP_NEAR 1.23  // 0.99
+//#define _KP_FAR 1.25  // 1.02
 //#define _KD_NEAR 70.0  // 35.0
 //#define _KD_FAR 75.0  // 37.5
 
-#define _KI 0.1
-#define _KP 1.4
-#define _KD 40.2
+#define _KI 0.3
+#define _KP 1.2
+#define _KD 30.3
 
-#define _ITERM_MAX 30
+#define _ITERM_MAX 10
 
 //////////////////////
 // global variables //
@@ -91,6 +91,8 @@ void setup() {
   iter = 0; sum = 0;
   alpha = _DIST_ALPHA;
   iterm_max = _ITERM_MAX;
+  pterm = dterm = 0;
+  iterm = 1;
 // move servo to neutral position
  duty_curr = _DUTY_NEU;
  myservo.writeMicroseconds(_DUTY_NEU); // [3228]
@@ -100,8 +102,8 @@ Serial.begin(57600); //[3128] 시리얼 포트 초기화
 
 // convert angle speed into duty change per interval.
 
-//  duty_chg_max = (float)(_DUTY_MAX - _DUTY_MIN) * _SERVO_SPEED / 180 * _INTERVAL_SERVO / 1000;
-//  duty_chg_adjust = (float) duty_chg_max * _INTERVAL_SERVO / _RAMPUP_TIME;
+//  duty_chg_max = (float)(_DUTY_MAX - _DUTY_MIN) * ((float)_SERVO_SPEED / 180) * ((float)_INTERVAL_SERVO / 1000);
+//  duty_chg_adjust = max((float) duty_chg_max * _INTERVAL_SERVO / (float)_RAMPUP_TIME, 1.0);
 //  duty_chg_per_interval = 0; // initial speed is set to 0.
   
   duty_chg_per_interval = (_DUTY_MAX - _DUTY_MIN) * ((float)_SERVO_SPEED / 180) * ((float)_INTERVAL_SERVO / 1000); //[3128]
@@ -133,11 +135,11 @@ void loop() {
     
 //    if (error_curr > 0) {
 //      pterm = error_curr * _KP_NEAR;
-//      dterm = (error_curr - error_prev) * _KD_NEAR;
+////      dterm = (error_curr - error_prev) * _KD_NEAR;
 //    }
 //    else {
 //      pterm = error_curr * _KP_FAR;
-//      dterm = (error_curr - error_prev) * _KD_FAR;
+////      dterm = (error_curr - error_prev) * _KD_FAR;
 //    }
 
     pterm = error_curr * _KP;
@@ -146,13 +148,9 @@ void loop() {
     
     if (iterm > iterm_max) iterm = iterm_max;
     if (iterm < (iterm_max * -1)) iterm = (iterm_max * -1);
-
+//    if (abs(iterm) > iterm_max) iterm = 1;
+    
     control = pterm + dterm + iterm;
-//    control = pterm;
-//    control = dterm;
-
-{
-  // duty_target = f(duty_neutral, control)
     duty_target = _DUTY_NEU + control;
 
   // [3133] keep duty_target value within the range of [_DUTY_MIN, _DUTY_MAX]
@@ -162,7 +160,6 @@ void loop() {
     error_prev = error_curr;
   
     last_sampling_time_dist = millis(); // [3133] 마지막 dist event 처리 시각 기록
-}
   }
   
   if(event_servo) {
@@ -177,6 +174,26 @@ void loop() {
       duty_curr -= duty_chg_per_interval;
       if(duty_curr < duty_target) duty_curr = duty_target;
     }
+
+//    if(duty_target > duty_curr) {
+//      if(duty_chg_per_interval < duty_chg_max) {
+//        duty_chg_per_interval += duty_chg_adjust;
+//        if(duty_chg_per_interval > duty_chg_max) duty_chg_per_interval = duty_chg_max;
+//      }
+//      duty_curr += duty_chg_per_interval;
+//      if(duty_curr > duty_target) duty_curr = duty_target;
+//    }
+//    else if(duty_target < duty_curr) {
+//      if(duty_chg_per_interval > -duty_chg_max) {
+//        duty_chg_per_interval -= duty_chg_adjust;
+//        if(duty_chg_per_interval < -duty_chg_max) duty_chg_per_interval = -duty_chg_max;
+//      }
+//      duty_curr += duty_chg_per_interval;
+//      if(duty_curr < duty_target) duty_curr = duty_target;
+//    }
+//    else {
+//      duty_chg_per_interval = 0;
+//    }
 
     // update servo position
     myservo.writeMicroseconds(duty_curr);
